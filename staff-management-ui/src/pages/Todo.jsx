@@ -156,11 +156,11 @@ const fetchData = useCallback(async () => {
                                 </span>
                               </div>
                               <h3 className="text-white font-bold text-[15px] mb-4 leading-tight group-hover:text-indigo-400 transition-colors">{task.title}</h3>
-                              {task.image && (
+                              {/* {task.image && (
                                 <div className="w-full h-32 mb-4 rounded-xl overflow-hidden border border-white/5">
                                   <img src={getTaskImageUrl(task.image)} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" alt="task" />
                                 </div>
-                              )}
+                              )} */}
                              {/* Inside your tasks.map((task) => ( ... )) */}
 
 <div className="flex items-center gap-3 pt-4 border-t border-white/5">
@@ -343,7 +343,7 @@ const CreateModal = ({ onClose, users, refresh, getAuthHeaders }) => {
 };
 // --- DETAIL MODAL COMPONENT ---
 // --- DETAIL MODAL COMPONENT (CLEANED & INTEGRATED) ---
-const DetailModal = ({ task, currentUserId, onClose, onUpdate, getAuthHeaders, DESIGNATIONS,users }) => {
+const DetailModal = ({ task, currentUserId, onClose, onUpdate, getAuthHeaders, DESIGNATIONS,users, API_BASE   }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -362,7 +362,8 @@ const DetailModal = ({ task, currentUserId, onClose, onUpdate, getAuthHeaders, D
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
       // 2. Existing state resets
-      setEditForm({ ...task }); 
+      setEditForm({ ...task, status: task.status || "pending" }); 
+
       setIsEditing(false); 
       setNewFile(null);
     } 
@@ -371,26 +372,59 @@ const DetailModal = ({ task, currentUserId, onClose, onUpdate, getAuthHeaders, D
   if (!task || !editForm) return null;
 
   const handleUpdate = async () => {
-    if (isSaving) return;
-    setIsSaving(true);
-    const fd = new FormData();
-    fd.append('title', editForm.title);
-    fd.append('description', editForm.description || '');
-    fd.append('assigned_to', editForm.assigned_to);
-    fd.append('designation_id', editForm.designation_id);
-    if (newFile) fd.append('file', newFile);
+  if (isSaving) return;
+  setIsSaving(true);
 
-    try {
-      const res = await fetch(`${API_BASE}/tasks/update/${task.id}`, { 
-        method: "PUT", 
-        headers: getAuthHeaders(), 
-        body: fd 
+  const fd = new FormData();
+  fd.append('title', editForm.title);
+  fd.append('description', editForm.description || '');
+  fd.append('assigned_to', editForm.assigned_to);
+  fd.append('designation_id', editForm.designation_id);
+
+  if (newFile) fd.append('file', newFile);
+
+  try {
+    // ✅ First update main data
+    await fetch(`${API_BASE}/tasks/update/${task.id}`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: fd
+    });
+
+    // ✅ THEN update status separately
+    if (editForm.status !== task.status) {
+      await fetch(`${API_BASE}/tasks/task-status/${task.id}?status=${editForm.status}`, {
+        method: "PUT",
+        headers: getAuthHeaders()
       });
-      if (res.ok) { await onUpdate(); onClose(); }
-    } catch (e) { console.error("Update error:", e); } 
-    finally { setIsSaving(false); }
-  };
+    }
 
+    await onUpdate();
+    onClose();
+
+  } catch (e) {
+    console.error("Update error:", e);
+  } finally {
+    setIsSaving(false);
+  }
+};
+const handleStatusChange = async (newStatus) => {
+  // Optimistic UI update
+  setEditForm(prev => ({ ...prev, status: newStatus }));
+
+  try {
+    await fetch(`${API_BASE}/tasks/task-status/${task.id}?status=${newStatus}`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+    });
+
+    // Refresh board
+    await onUpdate();
+
+  } catch (err) {
+    console.error("Status update failed:", err);
+  }
+};
  const handleDelete = async () => {
   if (!window.confirm("ARE YOU SURE? This action will permanently purge this asset.")) return;
   
@@ -463,37 +497,80 @@ const DetailModal = ({ task, currentUserId, onClose, onUpdate, getAuthHeaders, D
         </div>
 
         {/* RIGHT: DATA CORE */}
-        <div className="w-full lg:w-7/12 p-10 lg:p-16 relative">
-          <button onClick={onClose} className="absolute top-10 right-10 p-3 hover:bg-white/5 rounded-full text-slate-500 hover:text-white transition-all"><X /></button>
+       {/* RIGHT: DATA CORE */}
+<div className="w-full lg:w-7/12 p-10 lg:p-16 relative flex flex-col justify-between">
+  <button onClick={onClose} className="absolute top-10 right-10 p-3 hover:bg-white/5 rounded-full text-slate-500 hover:text-white transition-all">
+    <X />
+  </button>
 
-          <div className="mb-10">
-            <div className="flex items-center gap-4 mb-6">
-              <span className="px-5 py-1.5 bg-indigo-600 rounded-full text-[9px] font-black uppercase tracking-widest text-white shadow-[0_0_15px_rgba(79,70,229,0.3)]">
-                {task.status}
-              </span>
-            </div>
+  <div>
+    {/* STATUS SELECTOR / DISPLAY */}
+    <div className="mb-10 group">
+      <label className="text-[10px] text-indigo-400 font-black uppercase tracking-[0.3em] mb-3 block ml-1 opacity-70">
+        Deployment Phase
+      </label>
 
-            {isEditing ? (
-              <div className="space-y-6">
-                <div>
-                  <label className="text-[9px] text-indigo-400 font-bold uppercase tracking-widest mb-2 block ml-2">Title</label>
-                  <input className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl text-white text-2xl font-bold outline-none focus:border-indigo-500/50" value={editForm.title} onChange={e => setEditForm({...editForm, title: e.target.value})} />
-                </div>
-                <div>
-                  <label className="text-[9px] text-indigo-400 font-bold uppercase tracking-widest mb-2 block ml-2">Description</label>
-                  <textarea className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl text-white text-sm h-48 outline-none focus:border-indigo-500/50 resize-none" value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})} />
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-8">
-                <h2 className="text-6xl font-black text-white italic tracking-tighter uppercase leading-none">{task.title}</h2>
-                <div className="p-6 bg-white/[0.02] border-l-4 border-indigo-500 rounded-r-3xl">
-                  <p className="text-slate-400 text-lg leading-relaxed font-medium italic">"{task.description || 'No briefing recorded.'}"</p>
-                </div>
-              </div>
-            )}
+      {isEditing ? (
+        <div className="relative">
+          <select
+            value={editForm.status}
+            onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+            className="w-full appearance-none bg-white/[0.03] border border-white/10 p-5 pr-12 rounded-2xl text-white text-[11px] font-black uppercase tracking-[0.2em] outline-none focus:border-indigo-500/50 transition-all cursor-pointer hover:border-white/20"
+          >
+            <option value="pending" className="bg-[#08090d]">PENDING</option>
+            <option value="current" className="bg-[#08090d]">CURRENT</option>
+            <option value="preview" className="bg-[#08090d]">PREVIEW</option>
+            <option value="done" className="bg-[#08090d]">COMPLETED</option>
+          </select>
+          <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-indigo-400/60">
+            <Layout size={16} />
           </div>
+        </div>
+      ) : (
+        <div className="inline-flex items-center gap-3 px-6 py-3 bg-indigo-500/10 border border-indigo-500/20 rounded-full">
+          <div className={`w-2 h-2 rounded-full animate-pulse ${COLUMN_META[task.status]?.color || 'bg-slate-500'}`} />
+          <span className="text-white font-black uppercase text-[11px] tracking-widest">
+            {task.status}
+          </span>
+        </div>
+      )}
+    </div>
 
+    {/* CONTENT SECTION */}
+    {isEditing ? (
+      <div className="space-y-6">
+        <div>
+          <label className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-2 block ml-2">Header</label>
+          <input 
+            className="w-full bg-white/5 border border-white/10 p-6 rounded-3xl text-white text-2xl font-bold outline-none focus:border-indigo-500/50" 
+            value={editForm.title} 
+            onChange={e => setEditForm({...editForm, title: e.target.value})} 
+          />
+        </div>
+        <div>
+          <label className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-2 block ml-2">Objective Brief</label>
+          <textarea 
+            className="w-full bg-white/5 border border-white/10 p-6 rounded-3xl text-white text-sm h-48 outline-none focus:border-indigo-500/50 resize-none leading-relaxed" 
+            value={editForm.description} 
+            onChange={e => setEditForm({...editForm, description: e.target.value})} 
+          />
+        </div>
+      </div>
+    ) : (
+      <div className="space-y-8">
+        <h2 className="text-5xl md:text-7xl font-black text-white italic tracking-tighter uppercase leading-[0.85]">
+          {task.title}
+        </h2>
+        <div className="p-8 bg-white/[0.02] border-l-2 border-indigo-500/50 rounded-r-[2rem]">
+          <p className="text-slate-400 text-xl leading-relaxed font-medium italic opacity-80">
+            {task.description || 'No briefing recorded for this asset.'}
+          </p>
+        </div>
+      </div>
+    )}
+  </div>
+
+ 
           <div className="grid grid-cols-2 gap-8 py-8 border-y border-white/5">
            <div>
   <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em] block mb-2">Staff</span>

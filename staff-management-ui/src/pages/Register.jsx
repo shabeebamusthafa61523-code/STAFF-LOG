@@ -209,6 +209,19 @@ const Register = () => {
                 "Finalize Registration"
               )}
             </button>
+            {/* Login Redirect Link */}
+<div className="mt-8 pt-6 border-t border-white/5 text-center">
+  <p className="text-slate-500 text-xs font-medium uppercase tracking-widest">
+    Already have an account?{" "}
+    <button
+      type="button"
+      onClick={() => navigate('/login')}
+      className="text-indigo-400 hover:text-indigo-300 font-black transition-colors ml-1"
+    >
+      Sign In Here
+    </button>
+  </p>
+</div>
           </form>
         </div>
       </motion.div>
